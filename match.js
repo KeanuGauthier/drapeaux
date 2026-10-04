@@ -1,4 +1,4 @@
-// Comparaison très tolérante d'une saisie avec le nom d'un pays.
+// Comparaison d'une saisie avec le nom d'un pays : accents, majuscules, ponctuation, abréviations et quelques fautes de frappe.
 import { COUNTRIES } from "./data.js";
 
 const STOP = new Set(["le", "la", "les", "l", "de", "du", "des", "d", "et", "and", "of", "the", "un", "une", "en", "au", "aux", "el"]);
@@ -17,19 +17,8 @@ function tokens(s) {
     .map((t) => (ABBR[t] ?? t));
 }
 
-// Repli phonétique approximatif pour absorber les fautes d'orthographe courantes
-function phon(s) {
-  return s
-    .replace(/ph/g, "f")
-    .replace(/[kq]/g, "c")
-    .replace(/y/g, "i")
-    .replace(/z/g, "s")
-    .replace(/h/g, "")
-    .replace(/(.)\1+/g, "$1");
-}
-
 export function keysOf(s) {
-  const t = tokens(s).map(phon).filter(Boolean);
+  const t = tokens(s);
   if (!t.length) return [];
   const joined = t.join("");
   const sorted = [...t].sort().join("");
@@ -56,7 +45,7 @@ function dist(a, b, max) {
   return prev[lb];
 }
 
-export const tolerance = (len) => (len <= 3 ? 0 : len <= 5 ? 1 : len <= 8 ? 2 : len <= 11 ? 3 : 4);
+export const tolerance = (len) => (len <= 4 ? 0 : len <= 7 ? 1 : len <= 11 ? 2 : 3);
 
 const INDEX = COUNTRIES.map((c) => [...new Set([c.name, ...c.aliases].flatMap(keysOf))]);
 
@@ -83,4 +72,11 @@ export function isCorrect(input, idx) {
 // Correspondance exacte (sans faute) : sert à la validation automatique pendant la frappe
 export function isExact(input, idx) {
   return keysOf(input).some((k) => INDEX[idx].includes(k));
+}
+
+// Le nom officiel recopié (pas un alias) : sert à la recopie après une erreur
+export function isName(input, idx) {
+  const ks = keysOf(input);
+  const names = keysOf(COUNTRIES[idx].name);
+  return ks.some((k) => names.includes(k));
 }

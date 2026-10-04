@@ -1,5 +1,5 @@
 import { COUNTRIES } from "./data.js";
-import { isCorrect, isExact } from "./match.js";
+import { isCorrect, isExact, isName } from "./match.js";
 
 const LOT_SIZE = 10;
 const TOTAL = COUNTRIES.length;
@@ -22,12 +22,12 @@ const preload = (i) => { if (i != null) new Image().src = flagSrc(i); };
 
 /* ---------- État (sauvegardé dans le navigateur) ---------- */
 
-const fresh = (interval = 5) => ({ interval, frontier: 0, passed: 0, queue: [], cur: null });
+const fresh = (interval = 5) => ({ interval, frontier: 0, passed: 0, queue: [], runFails: [], cur: null });
 
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && typeof s.frontier === "number" && Array.isArray(s.queue)) return s;
+    if (s && typeof s.frontier === "number" && Array.isArray(s.queue)) return { runFails: [], ...s };
   } catch {}
   return fresh();
 }
@@ -44,6 +44,8 @@ let lockUntil = 0;
    - nouveau lot N : apprentissage N, test N, puis révision du lot N-1
    - tous les `interval` lots : parcours complet des lots 1..N à la place de la révision
    - erreur au lot X : on termine X, on le refait, puis on recule au lot X-1
+   - pendant un parcours complet : pas de recul. On va jusqu'au bout, puis on refait dans l'ordre
+     chaque lot où il y a eu une erreur (kind "fix"), jusqu'au sans-faute
 */
 
 function nextStep() {
@@ -67,18 +69,20 @@ function stepInfo(step) {
     case "new":
       return step.type === "learn"
         ? { chip: "Nouveau lot", cls: "new", title: `Lot ${n} : à apprendre`, text: `Voici les ${count} drapeaux du lot ${n}, avec leur nom. Prends le temps de les retenir : on te teste juste après.`, btn: "Découvrir les drapeaux" }
-        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays : 20 secondes par drapeau, 3 essais. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
+        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays : 20 secondes par drapeau, 3 essais. Après une erreur, tu recopies le nom 3 fois. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
     case "review":
       return { chip: `Révision · lot ${n}`, cls: "", title: `On revient au lot ${n}`, text: "Un lot en arrière, pour être sûr que ça reste en mémoire.", btn: "Réviser" };
     case "redo":
       return { chip: `À refaire · lot ${n}`, cls: "back", title: `On refait le lot ${n}`, text: "Au moins une erreur : on recommence ce lot.", btn: "Recommencer" };
+    case "fix":
+      return { chip: `Rattrapage · lot ${n}`, cls: "back", title: `On refait le lot ${n}`, text: "Fin du parcours : on refait, dans l'ordre, les lots où tu as fait des erreurs.", btn: "Recommencer" };
     case "back":
       return { chip: `Retour · lot ${n}`, cls: "back", title: `Retour au lot ${n}`, text: "Après une erreur, on recule d'un lot avant de repartir.", btn: "Y aller" };
     case "run":
       return {
         chip: `Parcours · ${n}/${step.runTotal}`, cls: "run",
         title: n === 1 ? "Retour à zéro" : `Parcours complet : lot ${n}`,
-        text: n === 1 ? `Tous les ${S.interval} lots, on repart de zéro : lots 1 à ${step.runTotal} d'affilée.` : `On enchaîne avec le lot ${n} sur ${step.runTotal}.`,
+        text: n === 1 ? `On repart de zéro : lots 1 à ${step.runTotal} d'affilée. Si tu te trompes, on continue jusqu'au bout, puis on refait les lots ratés.` : `On enchaîne avec le lot ${n} sur ${step.runTotal}.`,
         btn: n === 1 ? "Lancer le parcours" : "Continuer",
       };
   }
@@ -99,6 +103,7 @@ function begin() {
   c.results = [];
   c.answered = false;
   c.tries = 0;
+  c.copy = 0;
   save();
   render(true);
 }
@@ -110,15 +115,38 @@ function finishLearn() {
 function finishQuiz() {
   const { step, order, results } = S.cur;
   const wrong = order.filter((_, i) => !results[i].ok);
-  const summary = { step, total: order.length, correct: order.length - wrong.length, wrong };
-  if (wrong.length) {
+  const summary = { step, total: order.length, correct: order.length - wrong.length, wrong, note: "" };
+  if (step.kind === "run") {
+    // parcours complet : on ne recule pas, on note le lot et on continue
+    if (step.lot === 1) S.runFails = [];
+    if (wrong.length) S.runFails.push(step.lot);
+    const end = step.lot === step.runTotal;
+    if (end && S.runFails.length) {
+      S.queue.unshift(...S.runFails.map((lot) => ({ type: "quiz", lot, kind: "fix" })));
+      summary.note = `Fin du parcours : on refait ${S.runFails.length > 1 ? "les lots" : "le lot"} ${S.runFails.join(", ")}.`;
+      S.runFails = [];
+    } else {
+      summary.note = wrong.length ? "On continue le parcours, tu referas ce lot à la fin." : "Sans-faute, on avance.";
+    }
+    if (!wrong.length) S.passed = Math.max(S.passed, step.lot);
+  } else if (step.kind === "fix") {
+    if (wrong.length) {
+      S.queue.unshift({ type: "quiz", lot: step.lot, kind: "fix" });
+      summary.note = `On refait encore le lot ${step.lot}.`;
+    } else {
+      summary.note = "Sans-faute, on avance.";
+      S.passed = Math.max(S.passed, step.lot);
+    }
+  } else if (wrong.length) {
     const extra = [{ type: "quiz", lot: step.lot, kind: "redo" }];
     if (step.lot > 1) extra.push({ type: "quiz", lot: step.lot - 1, kind: "back" });
     // le lot du "retour" est déjà au programme : pas besoin de le refaire deux fois de suite
     const back = extra[extra.length - 1];
     while (S.queue[0] && S.queue[0].type === "quiz" && S.queue[0].lot === back.lot && ["review", "back"].includes(S.queue[0].kind)) S.queue.shift();
     S.queue.unshift(...extra);
+    summary.note = step.lot > 1 ? `On refait le lot ${step.lot}, puis on recule au lot ${step.lot - 1}.` : "On refait le lot 1.";
   } else {
+    summary.note = "Sans-faute, on avance.";
     S.passed = Math.max(S.passed, step.lot);
   }
   const next = nextStep();
@@ -129,6 +157,7 @@ function finishQuiz() {
 // Une réponse correcte se valide toute seule ; sinon 3 essais (à la validation) et 20 s par drapeau.
 const TIME_LIMIT = 20000;
 const MAX_TRIES = 3;
+const COPY_TIMES = 3; // après une erreur, on recopie le nom du pays
 let deadline = 0;
 let timerId = null;
 
@@ -191,9 +220,28 @@ function submitAnswer(given) {
   input.focus({ preventScroll: true });
 }
 
+const needsCopy = (c) => c.phase === "quiz" && c.answered && !c.results[c.pos].ok && (c.copy || 0) < COPY_TIMES;
+
+function copyAttempt(given) {
+  const c = S.cur;
+  given = given.trim();
+  if (!given) return;
+  if (isName(given, c.order[c.pos])) {
+    c.copy = (c.copy || 0) + 1;
+    lockUntil = Date.now() + 250;
+    save();
+    return showCopy();
+  }
+  const fb = document.getElementById("copy-msg");
+  fb.textContent = "Ce n'est pas le bon nom : recopie-le exactement.";
+  const input = document.getElementById("answer");
+  input.select();
+}
+
 function next() {
   const c = S.cur;
   if (Date.now() < lockUntil) return;
+  if (needsCopy(c)) return;
   if (c.phase === "learn") {
     if (c.pos + 1 >= c.order.length) return finishLearn();
     c.pos++;
@@ -201,6 +249,7 @@ function next() {
     c.pos++;
     c.answered = false;
     c.tries = 0;
+    c.copy = 0;
     if (c.pos >= c.order.length) return finishQuiz();
   }
   save();
@@ -254,9 +303,10 @@ function renderHome() {
         <li>Chaque nouveau lot de 10 drapeaux t'est présenté avec le nom des pays, puis tu es testé.</li>
         <li>Ensuite on revient un lot en arrière pour réviser.</li>
         <li>À chaque erreur, tu termines le lot, tu le refais, puis tu recules au lot précédent.</li>
-        <li>Tous les ${S.interval || "—"} lots, on repart de zéro : lots 1 à N d'affilée.</li>
+        <li>Tous les ${S.interval || "—"} lots, on repart de zéro : lots 1 à N d'affilée, sans recul. Les lots où tu t'es trompé sont refaits à la fin, dans l'ordre.</li>
         <li>Dès que tu tapes le bon nom, ça valide tout seul. Tu as 20 secondes par drapeau et 3 essais si tu valides un mauvais nom.</li>
-        <li>Les accents, les majuscules, les abréviations (USA, RDC…) et les petites fautes sont acceptés.</li>
+        <li>Après chaque erreur, tu recopies le nom du pays 3 fois avant de passer au suivant.</li>
+        <li>Les accents, les majuscules et les abréviations (USA, RDC…) sont acceptés, ainsi que les petites fautes de frappe, mais pas les grosses.</li>
       </ol>
     </details>`;
 }
@@ -273,14 +323,9 @@ function resultBlock(prev) {
   const info = stepInfo(prev.step);
   const wrong = prev.wrong.map((i) => `
     <div class="mistake"><img src="${flagSrc(i)}" alt=""><span>${esc(COUNTRIES[i].name)}</span></div>`).join("");
-  const consequence = perfect
-    ? "Sans-faute, on avance."
-    : prev.step.lot > 1
-      ? `On refait le lot ${prev.step.lot}, puis on recule au lot ${prev.step.lot - 1}.`
-      : "On refait le lot 1.";
   return `<section class="card result">
     <div class="score ${perfect ? "ok" : "ko"}">${prev.correct}/${prev.total}</div>
-    <p><strong>${esc(info.title)}</strong> · ${perfect ? "Parfait !" : "À revoir."} ${consequence}</p>
+    <p><strong>${esc(info.title)}</strong> · ${perfect ? "Parfait !" : "À revoir."} ${esc(prev.note || "")}</p>
     ${wrong ? `<h3 class="small muted">Les drapeaux ratés</h3><div class="mistakes">${wrong}</div>` : ""}
   </section>`;
 }
@@ -340,6 +385,7 @@ function renderQuestion(focus) {
         <input type="text" id="answer" name="answer" aria-label="Nom du pays" placeholder="Nom du pays"
           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
         <div class="feedback" id="feedback" hidden></div>
+        <div class="copy" id="copy" hidden></div>
         <div class="row" id="ask-row">
           <button type="button" class="btn ghost" data-act="skip">Je ne sais pas</button>
           <button type="submit" class="btn primary">Valider</button>
@@ -364,8 +410,6 @@ function showFeedback() {
   const fb = document.getElementById("feedback");
   const name = esc(COUNTRIES[idx].name);
   form.classList.add(r.ok ? "ok" : "ko");
-  input.readOnly = true;
-  input.value = r.given;
   input.setAttribute("enterkeyhint", "next");
   fb.className = `feedback ${r.ok ? "ok" : "ko"}`;
   document.getElementById("timer").hidden = true;
@@ -374,10 +418,34 @@ function showFeedback() {
     : `<strong>${r.timeout ? "⏱ Temps écoulé" : r.given ? "✗ Raté" : "✗ Passé"}</strong><span class="small">C'était :</span> <span class="name">${name}</span>`;
   fb.hidden = false;
   document.getElementById("ask-row").hidden = true;
-  document.getElementById("done-row").hidden = false;
   const last = c.pos + 1 >= c.order.length;
   document.getElementById("next-btn").textContent = last ? "Voir le résultat →" : "Suivant →";
   document.getElementById("dots").innerHTML = dotsHTML(c);
+  if (r.ok) {
+    input.readOnly = true;
+    input.value = r.given;
+    document.getElementById("done-row").hidden = false;
+    input.focus({ preventScroll: true });
+  } else showCopy();
+}
+
+// après une erreur : recopier le nom du pays 3 fois avant de passer au suivant
+function showCopy() {
+  const c = S.cur;
+  const input = document.getElementById("answer");
+  const box = document.getElementById("copy");
+  const done = (c.copy || 0) >= COPY_TIMES;
+  const name = COUNTRIES[c.order[c.pos]].name;
+  box.hidden = false;
+  box.innerHTML = done
+    ? `<strong>C'est noté !</strong>`
+    : `<strong>Recopie ${COPY_TIMES} fois : <span class="name">${esc(name)}</span></strong>
+       <span class="copy-dots">${Array.from({ length: COPY_TIMES }, (_, k) => `<span class="dot ${k < c.copy ? "ok" : ""}"></span>`).join("")}</span>
+       <span class="small" id="copy-msg">${c.copy || 0} / ${COPY_TIMES}</span>`;
+  input.value = "";
+  input.readOnly = done;
+  input.placeholder = done ? "" : `Recopie : ${name}`;
+  document.getElementById("done-row").hidden = !done;
   input.focus({ preventScroll: true });
 }
 
@@ -423,6 +491,7 @@ $app.addEventListener("click", (e) => {
     case "prev": if (S.cur.pos > 0) { S.cur.pos--; save(); render(); } break;
     case "skip": finalize({ ok: false, given: "" }); break;
     case "fullrun":
+      S.runFails = [];
       S.queue = runSteps(LOTS);
       startStep(S.queue.shift(), null);
       break;
@@ -433,6 +502,7 @@ $app.addEventListener("submit", (e) => {
   e.preventDefault();
   const c = S.cur;
   if (!c || c.phase !== "quiz") return;
+  if (needsCopy(c)) return copyAttempt(document.getElementById("answer").value);
   if (c.answered) return next();
   submitAnswer(document.getElementById("answer").value);
 });
@@ -440,8 +510,12 @@ $app.addEventListener("submit", (e) => {
 // validation automatique dès que le mot est le bon
 $app.addEventListener("input", (e) => {
   const c = S.cur;
-  if (e.target.id !== "answer" || e.isComposing || !c || c.phase !== "quiz" || c.answered) return;
+  if (e.target.id !== "answer" || e.isComposing || !c || c.phase !== "quiz") return;
   const v = e.target.value.trim();
+  if (c.answered) {
+    if (needsCopy(c) && v && isName(v, c.order[c.pos])) copyAttempt(v);
+    return;
+  }
   if (v && isExact(v, c.order[c.pos])) finalize({ ok: true, given: v });
 });
 

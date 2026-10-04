@@ -1,5 +1,5 @@
 import { COUNTRIES } from "./data.js";
-import { isCorrect, keysOf, tolerance } from "./match.js";
+import { isCorrect, isName, keysOf, tolerance } from "./match.js";
 const find = (n) => COUNTRIES.findIndex((c) => c.name === n);
 const cases = [
   ["États-Unis","usa",1],["États-Unis","etats unis",1],["États-Unis","les états-unis",1],["États-Unis","etat unis",1],
@@ -12,7 +12,7 @@ const cases = [
   ["Niger","nigeria",0],["Nigeria","niger",0],["Niger","niger",1],["Nigeria","nigerya",1],["Soudan","soudan du sud",0],["Soudan du Sud","soudan",0],
   ["Soudan du Sud","sud soudan",1],["Guinée","guinée bissau",0],["Guinée-Bissau","guinee bissau",1],["Guinée","guinee",1],["Guinée Équatoriale","guinee equatoriale",1],
   ["Dominique","dominicaine",0],["République Dominicaine","dominicaine",1],["Dominique","dominique",1],
-  ["Mali","malie",0],["Malte","mlate",1],["Mali","malte",0],["Cuba","cube",1],["Oman","omane",1],
+  ["Mali","malie",0],["Malte","mlate",1],["Mali","malte",0],["Cuba","cube",0],["Oman","omane",0],
   ["Saint-Marin","saint marin",1],["Saint-Marin","st marin",1],["Saint-Marin","san marino",1],
   ["Îles Marshall","marshall",1],["Salomon","iles salomon",1],["Salomon","salomon",1],
   ["Macédoine du Nord","macedoine",1],["Macédoine du Nord","macedoine du nord",1],
@@ -27,10 +27,10 @@ const cases = [
   ["République Tchèque","tchequie",1],["République Tchèque","republique tcheque",1],
   ["Biélorussie","belarus",1],["Biélorussie","bielorusie",1],["Timor Oriental","timor leste",1],["Salvador","el salvador",1],
   ["Corée du Sud","coree du sud",1],["Corée du Sud","coree du nord",0],["Corée du Nord","coree nord",1],["Corée du Sud","coree",0],
-  ["Afrique du Sud","afrique du sud",1],["Afrique du Sud","afrik du sud",1],["Nouvelle-Zélande","nouvelle zelande",1],["Nouvelle-Zélande","nouvelle zeland",1],
-  ["Inde","indes",1],["Iran","irak",0],["Irak","iran",0],["Autriche","australie",0],["Australie","autralie",1],["Slovaquie","slovenie",0],["Slovénie","slovaquie",0],
-  ["Maurice","mauritanie",0],["Mauritanie","mauritanie",1],["Mauritanie","mauritani",1],["Guyana","guyane",0],
-  ["Sierra Leone","sierra leon",1],["Philippines","philipines",1],["Philippines","filipines",1],["Qatar","katar",1],["Bahreïn","bahrein",1],
+  ["Afrique du Sud","afrique du sud",1],["Afrique du Sud","afrik du sud",0],["Nouvelle-Zélande","nouvelle zelande",1],["Nouvelle-Zélande","nouvelle zeland",1],
+  ["Inde","indes",0],["Iran","irak",0],["Irak","iran",0],["Autriche","australie",0],["Australie","autralie",1],["Slovaquie","slovenie",0],["Slovénie","slovaquie",0],
+  ["Maurice","mauritanie",0],["Mauritanie","mauritanie",1],["Mauritanie","mauritani",1],["Guyana","guyane",1],
+  ["Sierra Leone","sierra leon",1],["Philippines","philipines",1],["Philippines","filipines",0],["Qatar","katar",1],["Bahreïn","bahrein",1],
   ["Luxembourg","luxembour",1],["Liechtenstein","lichtenstein",1],["Turkménistan","turkmenistan",1],["Ouzbékistan","ouzbekistan",1],["Ouzbékistan","uzbekistan",1],
   ["Kirghizistan","kirghizstan",1],["Tadjikistan","tadjikistan",1],["Tadjikistan","tajikistan",1],["Burkina Faso","burkina",1],["Burkina Faso","burkinafaso",1],
   ["Allemagne","alemagne",1],["Suisse","suiss",1],["Suède","suisse",0],["Géorgie","georgie",1],["Hongrie","hongri",1],["Panama","panamas",1],
@@ -44,6 +44,10 @@ for (const [n, inp, exp] of cases) {
 }
 // chaque nom officiel doit passer pour lui-même
 COUNTRIES.forEach((c, i) => { for (const a of [c.name, ...c.aliases]) if (!isCorrect(a, i)) { console.log("ALIAS KO", c.name, a); bad++; } });
+// la recopie exige le nom officiel, pas un alias
+COUNTRIES.forEach((c, i) => { if (!isName(c.name, i)) { console.log("NOM KO", c.name); bad++; } });
+if (isName("usa", find("États-Unis"))) { console.log("isName accepte un alias"); bad++; }
+if (!isName("etats unis", find("États-Unis"))) { console.log("isName refuse un nom sans accent"); bad++; }
 // collisions de clés exactes entre pays
 const seen = new Map();
 COUNTRIES.forEach((c, i) => { for (const a of [c.name, ...c.aliases]) for (const k of keysOf(a)) { if (seen.has(k) && seen.get(k) !== i) console.log("COLLISION", k, COUNTRIES[seen.get(k)].name, "/", c.name); seen.set(k, i); } });

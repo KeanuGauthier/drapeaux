@@ -105,6 +105,11 @@ p { margin: 0; }
 .feedback strong { display: block; font-size: 1.05rem; }
 .feedback .name { color: var(--ink); font-family: var(--serif); font-size: 1.25rem; font-weight: 700; }
 .feedback .small { color: var(--muted); }
+.copy { width: 100%; border-radius: 14px; padding: 12px 14px; text-align: left; background: var(--warn-bg); color: var(--warn); display: flex; flex-direction: column; gap: 6px; }
+.copy strong { font-size: 1.05rem; }
+.copy .name { color: var(--ink); font-family: var(--serif); font-size: 1.25rem; font-weight: 700; }
+.copy .small { color: var(--muted); }
+.copy-dots { display: flex; gap: 6px; }
 
 /* Chrono */
 .timer { width: min(86vw, 400px); display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--muted); }

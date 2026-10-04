@@ -7,9 +7,10 @@ dans le même ordre, lot par lot (10 drapeaux).
 ## Règles
 - Nouveau lot : les drapeaux sont présentés avec leur nom, puis test du lot, puis révision du lot précédent.
 - Une erreur : on finit le lot, on le refait, puis on recule au lot précédent.
-- Tous les 5 lots (réglable) : on repart de zéro, lots 1 à N d'affilée.
+- Tous les 5 lots (réglable) : on repart de zéro, lots 1 à N d'affilée, sans recul en cas d'erreur. À la fin du parcours, on refait dans l'ordre chaque lot où il y a eu une erreur.
+- Après chaque erreur (mauvaise réponse, temps écoulé, « je ne sais pas »), il faut recopier le nom du pays 3 fois avant de continuer.
 - Pendant un test : validation automatique dès que le nom est exact, 20 secondes par drapeau (temps écoulé = faux), 3 essais quand on valide un mauvais nom.
-- Réponses très tolérantes : accents, majuscules, abréviations (USA, RDC…), noms anglais, fautes de frappe.
+- Réponses tolérantes mais pas laxistes : accents, majuscules, abréviations (USA, RDC…), noms anglais, petites fautes de frappe (1 lettre pour un nom de 5 à 7 lettres, 2 pour 8 à 11, 3 au-delà ; aucune pour 4 lettres ou moins).
 
 La progression est sauvegardée dans le navigateur (`localStorage`).
 
