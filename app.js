@@ -19,14 +19,6 @@ const lotIdx = (lot) => {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const flagSrc = (i) => `flags/${COUNTRIES[i].file}`;
 const preload = (i) => { if (i != null) new Image().src = flagSrc(i); };
-const shuffle = (a) => {
-  const r = [...a];
-  for (let i = r.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [r[i], r[j]] = [r[j], r[i]];
-  }
-  return r;
-};
 
 /* ---------- État (sauvegardé dans le navigateur) ---------- */
 
@@ -103,7 +95,7 @@ function begin() {
   const idx = lotIdx(c.step.lot);
   c.phase = c.step.type;
   c.pos = 0;
-  c.order = c.step.type === "learn" ? idx : shuffle(idx);
+  c.order = idx;
   c.results = [];
   c.answered = false;
   save();
