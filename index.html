@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5efe3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121722" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Drapeaux">
+  <title>Drapeaux du monde</title>
+  <meta name="description" content="Apprends les 196 drapeaux du monde lot par lot, avec révisions en retour arrière.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app" aria-live="polite"></main>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Réglages</h2>
+      <label class="field">
+        <span>Repartir de zéro tous les…</span>
+        <select id="interval-select">
+          <option value="3">3 lots</option>
+          <option value="4">4 lots</option>
+          <option value="5">5 lots</option>
+          <option value="6">6 lots</option>
+          <option value="8">8 lots</option>
+          <option value="10">10 lots</option>
+          <option value="0">jamais</option>
+        </select>
+      </label>
+      <p class="muted small">S'applique aux prochains lots.</p>
+      <button type="button" class="btn danger" id="reset-btn">Réinitialiser ma progression</button>
+      <button class="btn" value="close">Fermer</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
