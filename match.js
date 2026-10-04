@@ -79,3 +79,8 @@ export function isCorrect(input, idx) {
   });
   return bestIdx === idx && !tie && bestOk;
 }
+
+// Correspondance exacte (sans faute) : sert à la validation automatique pendant la frappe
+export function isExact(input, idx) {
+  return keysOf(input).some((k) => INDEX[idx].includes(k));
+}

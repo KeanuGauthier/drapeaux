@@ -1,5 +1,5 @@
 import { COUNTRIES } from "./data.js";
-import { isCorrect } from "./match.js";
+import { isCorrect, isExact } from "./match.js";
 
 const LOT_SIZE = 10;
 const TOTAL = COUNTRIES.length;
@@ -67,7 +67,7 @@ function stepInfo(step) {
     case "new":
       return step.type === "learn"
         ? { chip: "Nouveau lot", cls: "new", title: `Lot ${n} : à apprendre`, text: `Voici les ${count} drapeaux du lot ${n}, avec leur nom. Prends le temps de les retenir : on te teste juste après.`, btn: "Découvrir les drapeaux" }
-        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
+        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays : 20 secondes par drapeau, 3 essais. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
     case "review":
       return { chip: `Révision · lot ${n}`, cls: "", title: `On revient au lot ${n}`, text: "Un lot en arrière, pour être sûr que ça reste en mémoire.", btn: "Réviser" };
     case "redo":
@@ -98,6 +98,7 @@ function begin() {
   c.order = idx;
   c.results = [];
   c.answered = false;
+  c.tries = 0;
   save();
   render(true);
 }
@@ -125,15 +126,69 @@ function finishQuiz() {
   else { S.cur = { phase: "complete", prev: summary }; save(); render(); }
 }
 
-function answer(given) {
+// Une réponse correcte se valide toute seule ; sinon 3 essais (à la validation) et 20 s par drapeau.
+const TIME_LIMIT = 20000;
+const MAX_TRIES = 3;
+let deadline = 0;
+let timerId = null;
+
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+
+function startTimer() {
+  stopTimer();
+  deadline = Date.now() + TIME_LIMIT;
+  tick();
+  timerId = setInterval(tick, 100);
+}
+
+function tick() {
   const c = S.cur;
-  const idx = c.order[c.pos];
-  const ok = given.trim() ? isCorrect(given, idx) : false;
-  c.results[c.pos] = { ok, given: given.trim() };
+  if (view !== "session" || !c || c.phase !== "quiz" || c.answered) return stopTimer();
+  const left = deadline - Date.now();
+  if (left <= 0) {
+    const input = document.getElementById("answer");
+    return finalize({ ok: false, given: input ? input.value.trim() : "", timeout: true });
+  }
+  const bar = document.getElementById("tbar");
+  if (!bar) return;
+  bar.style.transform = `scaleX(${left / TIME_LIMIT})`;
+  bar.parentElement.classList.toggle("low", left < 5000);
+  document.getElementById("tsec").textContent = Math.ceil(left / 1000);
+}
+
+function finalize(result) {
+  const c = S.cur;
+  stopTimer();
+  c.results[c.pos] = result;
   c.answered = true;
   lockUntil = Date.now() + 250;
   save();
   showFeedback();
+}
+
+function showTries(given) {
+  const left = MAX_TRIES - S.cur.tries;
+  const fb = document.getElementById("feedback");
+  fb.className = "feedback warn";
+  fb.innerHTML = `<strong>Pas tout à fait${given ? ` : « ${esc(given)} »` : ""}</strong><span class="small">Il te reste ${left} essai${left > 1 ? "s" : ""}.</span>`;
+  fb.hidden = false;
+}
+
+function submitAnswer(given) {
+  const c = S.cur;
+  given = given.trim();
+  if (!given) return;
+  if (isCorrect(given, c.order[c.pos])) return finalize({ ok: true, given });
+  c.tries = (c.tries || 0) + 1;
+  if (c.tries >= MAX_TRIES) return finalize({ ok: false, given });
+  save();
+  showTries(given);
+  const input = document.getElementById("answer");
+  input.value = "";
+  input.focus({ preventScroll: true });
 }
 
 function next() {
@@ -145,6 +200,7 @@ function next() {
   } else {
     c.pos++;
     c.answered = false;
+    c.tries = 0;
     if (c.pos >= c.order.length) return finishQuiz();
   }
   save();
@@ -154,6 +210,7 @@ function next() {
 /* ---------- Rendu ---------- */
 
 function render(focus = false) {
+  stopTimer();
   window.scrollTo(0, 0);
   if (view === "gallery") return renderGallery();
   if (view === "session" && S.cur) {
@@ -198,6 +255,7 @@ function renderHome() {
         <li>Ensuite on revient un lot en arrière pour réviser.</li>
         <li>À chaque erreur, tu termines le lot, tu le refais, puis tu recules au lot précédent.</li>
         <li>Tous les ${S.interval || "—"} lots, on repart de zéro : lots 1 à N d'affilée.</li>
+        <li>Dès que tu tapes le bon nom, ça valide tout seul. Tu as 20 secondes par drapeau et 3 essais si tu valides un mauvais nom.</li>
         <li>Les accents, les majuscules, les abréviations (USA, RDC…) et les petites fautes sont acceptés.</li>
       </ol>
     </details>`;
@@ -276,6 +334,7 @@ function renderQuestion(focus) {
     <section class="stage">
       <div class="dots" id="dots">${dotsHTML(c)}</div>
       <p class="counter">Drapeau ${c.pos + 1} / ${c.order.length} · lot ${c.step.lot}</p>
+      <div class="timer" id="timer" role="timer" aria-label="Temps restant"><div class="timer-track"><div class="timer-bar" id="tbar"></div></div><span id="tsec">20</span></div>
       <img class="flag" src="${flagSrc(i)}" alt="Drapeau à deviner">
       <form class="answer-form" id="answer-form" autocomplete="off" novalidate>
         <input type="text" id="answer" name="answer" aria-label="Nom du pays" placeholder="Nom du pays"
@@ -290,8 +349,10 @@ function renderQuestion(focus) {
         </div>
       </form>
     </section>`;
-  if (c.answered) showFeedback();
-  else if (focus) document.getElementById("answer").focus({ preventScroll: true });
+  if (c.answered) return showFeedback();
+  if (c.tries) showTries("");
+  if (focus) document.getElementById("answer").focus({ preventScroll: true });
+  startTimer();
 }
 
 function showFeedback() {
@@ -307,9 +368,10 @@ function showFeedback() {
   input.value = r.given;
   input.setAttribute("enterkeyhint", "next");
   fb.className = `feedback ${r.ok ? "ok" : "ko"}`;
+  document.getElementById("timer").hidden = true;
   fb.innerHTML = r.ok
     ? `<strong>✓ Bonne réponse</strong><span class="name">${name}</span>`
-    : `<strong>✗ Raté${r.given ? "" : " (passé)"}</strong><span class="small">C'était :</span> <span class="name">${name}</span>`;
+    : `<strong>${r.timeout ? "⏱ Temps écoulé" : r.given ? "✗ Raté" : "✗ Passé"}</strong><span class="small">C'était :</span> <span class="name">${name}</span>`;
   fb.hidden = false;
   document.getElementById("ask-row").hidden = true;
   document.getElementById("done-row").hidden = false;
@@ -359,7 +421,7 @@ $app.addEventListener("click", (e) => {
     case "begin": begin(); break;
     case "next": next(); break;
     case "prev": if (S.cur.pos > 0) { S.cur.pos--; save(); render(); } break;
-    case "skip": answer(""); break;
+    case "skip": finalize({ ok: false, given: "" }); break;
     case "fullrun":
       S.queue = runSteps(LOTS);
       startStep(S.queue.shift(), null);
@@ -372,8 +434,15 @@ $app.addEventListener("submit", (e) => {
   const c = S.cur;
   if (!c || c.phase !== "quiz") return;
   if (c.answered) return next();
-  const input = document.getElementById("answer");
-  if (input.value.trim()) answer(input.value);
+  submitAnswer(document.getElementById("answer").value);
+});
+
+// validation automatique dès que le mot est le bon
+$app.addEventListener("input", (e) => {
+  const c = S.cur;
+  if (e.target.id !== "answer" || e.isComposing || !c || c.phase !== "quiz" || c.answered) return;
+  const v = e.target.value.trim();
+  if (v && isExact(v, c.order[c.pos])) finalize({ ok: true, given: v });
 });
 
 document.addEventListener("keydown", (e) => {
