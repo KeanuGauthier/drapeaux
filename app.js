@@ -69,7 +69,7 @@ function stepInfo(step) {
     case "new":
       return step.type === "learn"
         ? { chip: "Nouveau lot", cls: "new", title: `Lot ${n} : à apprendre`, text: `Voici les ${count} drapeaux du lot ${n}, avec leur nom. Prends le temps de les retenir : on te teste juste après.`, btn: "Découvrir les drapeaux" }
-        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays : 20 secondes par drapeau, 3 essais. Après une erreur, tu recopies le nom 3 fois. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
+        : { chip: `Test · lot ${n}`, cls: "new", title: `Test du lot ${n}`, text: "Tape le nom de chaque pays : 30 secondes par drapeau, 3 essais. Après une erreur, tu recopies le nom 3 fois. Même en cas d'erreur, tu finis le lot.", btn: "C'est parti" };
     case "review":
       return { chip: `Révision · lot ${n}`, cls: "", title: `On revient au lot ${n}`, text: "Un lot en arrière, pour être sûr que ça reste en mémoire.", btn: "Réviser" };
     case "redo":
@@ -154,8 +154,9 @@ function finishQuiz() {
   else { S.cur = { phase: "complete", prev: summary }; save(); render(); }
 }
 
-// Une réponse correcte se valide toute seule ; sinon 3 essais (à la validation) et 20 s par drapeau.
-const TIME_LIMIT = 20000;
+// Une réponse correcte se valide toute seule ; sinon 3 essais (à la validation) et 30 s par drapeau.
+const TIME_LIMIT = 30000;
+const AUTO_NEXT = 1000; // bonne réponse : une seconde pour voir l'orthographe, puis on passe au suivant
 const MAX_TRIES = 3;
 const COPY_TIMES = 3; // après une erreur, on recopie le nom du pays
 let deadline = 0;
@@ -165,6 +166,10 @@ function stopTimer() {
   clearInterval(timerId);
   timerId = null;
 }
+
+// bonne réponse : passage automatique au suivant après AUTO_NEXT ms
+let autoId = null;
+const clearAuto = () => { clearTimeout(autoId); autoId = null; };
 
 function startTimer() {
   stopTimer();
@@ -196,6 +201,8 @@ function finalize(result) {
   lockUntil = Date.now() + 250;
   save();
   showFeedback();
+  clearAuto();
+  if (result.ok) autoId = setTimeout(() => { autoId = null; lockUntil = 0; next(); }, AUTO_NEXT);
 }
 
 function showTries(given) {
@@ -241,6 +248,7 @@ function copyAttempt(given) {
 function next() {
   const c = S.cur;
   if (Date.now() < lockUntil) return;
+  clearAuto();
   if (needsCopy(c)) return;
   if (c.phase === "learn") {
     if (c.pos + 1 >= c.order.length) return finishLearn();
@@ -260,6 +268,7 @@ function next() {
 
 function render(focus = false) {
   stopTimer();
+  clearAuto();
   window.scrollTo(0, 0);
   if (view === "gallery") return renderGallery();
   if (view === "session" && S.cur) {
@@ -304,7 +313,7 @@ function renderHome() {
         <li>Ensuite on revient un lot en arrière pour réviser.</li>
         <li>À chaque erreur, tu termines le lot, tu le refais, puis tu recules au lot précédent.</li>
         <li>Tous les ${S.interval || "—"} lots, on repart de zéro : lots 1 à N d'affilée, sans recul. Les lots où tu t'es trompé sont refaits à la fin, dans l'ordre.</li>
-        <li>Dès que tu tapes le bon nom, ça valide tout seul. Tu as 20 secondes par drapeau et 3 essais si tu valides un mauvais nom.</li>
+        <li>Dès que tu tapes le bon nom, ça valide tout seul. Tu as 30 secondes par drapeau et 3 essais si tu valides un mauvais nom.</li>
         <li>Après chaque erreur, tu recopies le nom du pays 3 fois avant de passer au suivant.</li>
         <li>Les accents, les majuscules et les abréviations (USA, RDC…) sont acceptés, ainsi que les petites fautes de frappe, mais pas les grosses.</li>
       </ol>
@@ -379,7 +388,7 @@ function renderQuestion(focus) {
     <section class="stage">
       <div class="dots" id="dots">${dotsHTML(c)}</div>
       <p class="counter">Drapeau ${c.pos + 1} / ${c.order.length} · lot ${c.step.lot}</p>
-      <div class="timer" id="timer" role="timer" aria-label="Temps restant"><div class="timer-track"><div class="timer-bar" id="tbar"></div></div><span id="tsec">20</span></div>
+      <div class="timer" id="timer" role="timer" aria-label="Temps restant"><div class="timer-track"><div class="timer-bar" id="tbar"></div></div><span id="tsec">30</span></div>
       <img class="flag" src="${flagSrc(i)}" alt="Drapeau à deviner">
       <form class="answer-form" id="answer-form" autocomplete="off" novalidate>
         <input type="text" id="answer" name="answer" aria-label="Nom du pays" placeholder="Nom du pays"

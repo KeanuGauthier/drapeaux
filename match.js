@@ -58,6 +58,7 @@ export function isCorrect(input, idx) {
   INDEX.forEach((aliases, i) => {
     let d = Infinity, ok = false;
     for (const k of ks) for (const a of aliases) {
+      if (k.length < a.length && a.startsWith(k)) continue; // un nom tronqué (« egypt », « arabie ») n'est pas accepté
       const tol = tolerance(Math.min(a.length, Math.max(k.length, a.length)));
       const dd = dist(k, a, tol + 1);
       if (dd < d) d = dd;
